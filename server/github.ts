@@ -3,6 +3,12 @@ import { Octokit } from "@octokit/rest";
 let connectionSettings: any;
 
 async function getAccessToken() {
+  // Check if GITHUB_TOKEN is set (for local development)
+  if (process.env.GITHUB_TOKEN) {
+    return process.env.GITHUB_TOKEN;
+  }
+
+  // Otherwise use Replit connector (for Replit deployments)
   if (
     connectionSettings &&
     connectionSettings.settings.expires_at &&
@@ -19,13 +25,15 @@ async function getAccessToken() {
       : null;
 
   if (!xReplitToken) {
-    throw new Error("X_REPLIT_TOKEN not found for repl/depl");
+    throw new Error(
+      "GitHub authentication not configured. Please set GITHUB_TOKEN environment variable or configure Replit GitHub connector."
+    );
   }
 
   connectionSettings = await fetch(
     "https://" +
-      hostname +
-      "/api/v2/connection?include_secrets=true&connector_names=github",
+    hostname +
+    "/api/v2/connection?include_secrets=true&connector_names=github",
     {
       headers: {
         Accept: "application/json",

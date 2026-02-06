@@ -109,16 +109,6 @@ export default function Signin() {
                     onChange={(e) => setPassword(e.target.value)}
                     data-testid="input-signin-password"
                   />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0"
-                    onClick={() => setShowPassword(!showPassword)}
-                    data-testid="button-toggle-password"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </Button>
                 </div>
               </div>
               <Button

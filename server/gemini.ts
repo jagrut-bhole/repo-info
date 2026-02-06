@@ -196,7 +196,7 @@ export async function generateReadmeArchitecture(
 ): Promise<string> {
   const prompt = `Based on the following repository analysis, generate a professional README.md "Architecture" section in markdown format. Include:
 1. High-level architecture overview
-2. Tech stack summary table
+2. Tech stack summary 
 3. API endpoints table
 4. Database schema overview
 5. External integrations
