@@ -174,13 +174,22 @@ export async function registerRoutes(
       res.end();
     } catch (error: any) {
       console.error("Analysis error:", error);
+      let userMessage = error.message || "An unexpected error occurred";
+      if (
+        userMessage.includes("JSON") ||
+        userMessage.includes("parse") ||
+        userMessage.includes("Unexpected token")
+      ) {
+        userMessage =
+          "The AI returned an incomplete response. This can happen with very large repositories. Please try again — results may vary.";
+      }
       if (res.headersSent) {
         res.write(
-          `data: ${JSON.stringify({ step: "error", message: error.message })}\n\n`,
+          `data: ${JSON.stringify({ step: "error", message: userMessage })}\n\n`,
         );
         res.end();
       } else {
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: userMessage });
       }
     }
   });

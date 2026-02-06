@@ -3,6 +3,24 @@ import type { AnalysisResult } from "@shared/schema";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
+function sanitizeJSON(raw: string): string {
+  let text = raw.trim();
+
+  if (text.startsWith("```json")) {
+    text = text.slice(7);
+  } else if (text.startsWith("```")) {
+    text = text.slice(3);
+  }
+  if (text.endsWith("```")) {
+    text = text.slice(0, -3);
+  }
+  text = text.trim();
+
+  text = text.replace(/,\s*([}\]])/g, "$1");
+
+  return text;
+}
+
 export async function analyzeRepository(
   repoInfo: AnalysisResult["repoInfo"],
   fileTree: string[],
@@ -119,20 +137,29 @@ Rules:
     contents: prompt,
     config: {
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
     },
   });
 
   const rawText = response.text || "{}";
   let parsed: any;
+
   try {
     parsed = JSON.parse(rawText);
   } catch {
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      parsed = JSON.parse(jsonMatch[0]);
-    } else {
-      throw new Error("Failed to parse Gemini response as JSON");
+    try {
+      const sanitized = sanitizeJSON(rawText);
+      parsed = JSON.parse(sanitized);
+    } catch (innerErr: any) {
+      console.error(
+        "Failed to parse Gemini JSON. Response length:",
+        rawText.length,
+        "Error:",
+        innerErr.message,
+      );
+      throw new Error(
+        "The AI returned an incomplete response. This can happen with very large repositories. Please try again.",
+      );
     }
   }
 
