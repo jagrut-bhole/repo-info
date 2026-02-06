@@ -10,6 +10,7 @@ import {
 import {
   analyzeRepository,
   generateReadmeArchitecture,
+  generateFullReadme,
   generateMermaidDiagram,
 } from "./gemini";
 import type { AnalysisResult } from "@shared/schema";
@@ -319,6 +320,34 @@ export async function registerRoutes(
       }
       const readme = await generateReadmeArchitecture(analysis);
       return res.json({ readme });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/generate-full-readme", optionalAuthMiddleware, async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) {
+        return res.status(400).json({ error: "Repository URL is required" });
+      }
+
+      const parsed = parseGitHubUrl(url);
+      if (!parsed) {
+        return res.status(400).json({ error: "Invalid GitHub URL format" });
+      }
+
+      const { owner, repo: cleanRepo } = parsed;
+
+      const repoInfo = await fetchRepoInfo(owner, cleanRepo);
+      const tree = await fetchRepoTree(owner, cleanRepo);
+      const languages = await fetchLanguages(owner, cleanRepo);
+      const keyFiles = await fetchKeyFiles(owner, cleanRepo, tree);
+
+      const analysis = await analyzeRepository(repoInfo, tree, keyFiles, languages);
+      const readme = await generateFullReadme(analysis);
+
+      return res.json({ readme, analysis });
     } catch (error: any) {
       return res.status(500).json({ error: error.message });
     }

@@ -218,6 +218,82 @@ Return ONLY the markdown content, starting with ## Architecture`;
   return response.text || "";
 }
 
+export async function generateFullReadme(
+  analysis: AnalysisResult,
+): Promise<string> {
+  const prompt = `You are a developer writing a README.md file for a GitHub repository. Based on the following analysis of the repository, generate a complete, professional README.md file.
+
+IMPORTANT RULES:
+- Write in simple, clear, everyday language. No overly technical jargon.
+- Make it sound natural and human-written, not AI-generated.
+- Be specific to this repository - use actual file names, endpoints, and features found in the code.
+- Include practical examples where possible.
+
+Repository: ${analysis.repoInfo.owner}/${analysis.repoInfo.name}
+Description: ${analysis.repoInfo.description || "No description"}
+Primary Language: ${analysis.repoInfo.language}
+Stars: ${analysis.repoInfo.stars}
+
+Tech Stack: ${JSON.stringify(analysis.techStack)}
+API Endpoints: ${JSON.stringify(analysis.apiEndpoints)}
+Database: ${JSON.stringify(analysis.databaseMapping)}
+External Services: ${JSON.stringify(analysis.externalServices)}
+Environment Variables: ${JSON.stringify(analysis.envVariables)}
+Frontend-Backend Flows: ${JSON.stringify(analysis.frontendBackendFlows)}
+
+Generate a README.md with these sections:
+
+# Project Name
+Brief, engaging description of what this project does and why it exists.
+
+## Features
+List the key features of the project based on the actual code analysis. Be specific.
+
+## Tech Stack
+List the technologies, frameworks, and tools used.
+
+## Getting Started
+
+### Prerequisites
+What needs to be installed before setting up.
+
+### Installation
+Step-by-step instructions to clone and install the project.
+
+### Environment Variables
+List required environment variables with descriptions (do NOT include actual values, just descriptions).
+
+### Running the Project
+How to start the development server and access the app.
+
+## API Reference
+If API endpoints exist, list them in a clear table format with method, path, and description.
+
+## Database Schema
+If a database is used, briefly explain the data models.
+
+## Project Structure
+Brief overview of the directory layout and what each key folder/file does.
+
+## Contributing
+Simple guide for how others can contribute.
+
+## License
+A placeholder license section.
+
+Return ONLY the markdown content. Make it complete and ready to use.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: prompt,
+    config: {
+      maxOutputTokens: 8192,
+    },
+  });
+
+  return response.text || "";
+}
+
 export async function generateMermaidDiagram(
   analysis: AnalysisResult,
 ): Promise<string> {

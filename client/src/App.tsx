@@ -11,6 +11,7 @@ import Analysis from "@/pages/analysis";
 import Signup from "@/pages/signup";
 import Signin from "@/pages/signin";
 import Profile from "@/pages/profile";
+import GenerateDocs from "@/pages/generate-docs";
 import NotFound from "@/pages/not-found";
 import type { ReactNode } from "react";
 
@@ -37,6 +38,11 @@ function Router() {
       <Route path="/profile">
         <ProtectedRoute>
           <Profile />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/generate-docs">
+        <ProtectedRoute>
+          <GenerateDocs />
         </ProtectedRoute>
       </Route>
       <Route path="/signup" component={Signup} />

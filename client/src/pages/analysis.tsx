@@ -390,7 +390,7 @@ function ArchitectureFlowTab({ analysis }: { analysis: AnalysisResult }) {
                 nodeStrokeWidth={2}
                 pannable
                 zoomable
-                style={{ borderRadius: "8px" }}
+                style={{ borderRadius: "8px", backgroundColor: "hsl(var(--card))" }}
               />
             </ReactFlow>
           </div>
@@ -850,7 +850,6 @@ export default function AnalysisPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [exportLoading, setExportLoading] = useState<string | null>(null);
-  const dashboardRef = useRef<HTMLDivElement>(null);
   const hasStarted = useRef(false);
 
   useEffect(() => {
@@ -965,11 +964,16 @@ export default function AnalysisPage() {
     }
   }, [runAnalysis, analysisId]);
 
+  const getFlowElement = useCallback(() => {
+    return document.querySelector('[data-testid="container-architecture-flow"]') as HTMLElement | null;
+  }, []);
+
   const handleExportPng = useCallback(async () => {
-    if (!dashboardRef.current) return;
+    const flowEl = getFlowElement();
+    if (!flowEl) return;
     setExportLoading("png");
     try {
-      const dataUrl = await toPng(dashboardRef.current, { quality: 0.95, backgroundColor: "#fff" });
+      const dataUrl = await toPng(flowEl, { quality: 0.95, backgroundColor: "#1a1a2e" });
       const link = document.createElement("a");
       link.download = `architecture-${analysis?.repoInfo?.name || "diagram"}.png`;
       link.href = dataUrl;
@@ -979,13 +983,14 @@ export default function AnalysisPage() {
       toast({ title: "Export Failed", description: "Could not export as PNG", variant: "destructive" });
     }
     setExportLoading(null);
-  }, [analysis, toast]);
+  }, [analysis, toast, getFlowElement]);
 
   const handleExportSvg = useCallback(async () => {
-    if (!dashboardRef.current) return;
+    const flowEl = getFlowElement();
+    if (!flowEl) return;
     setExportLoading("svg");
     try {
-      const dataUrl = await toSvg(dashboardRef.current, { backgroundColor: "#fff" });
+      const dataUrl = await toSvg(flowEl, { backgroundColor: "#1a1a2e" });
       const link = document.createElement("a");
       link.download = `architecture-${analysis?.repoInfo?.name || "diagram"}.svg`;
       link.href = dataUrl;
@@ -995,13 +1000,14 @@ export default function AnalysisPage() {
       toast({ title: "Export Failed", description: "Could not export as SVG", variant: "destructive" });
     }
     setExportLoading(null);
-  }, [analysis, toast]);
+  }, [analysis, toast, getFlowElement]);
 
   const handleExportPdf = useCallback(async () => {
-    if (!dashboardRef.current) return;
+    const flowEl = getFlowElement();
+    if (!flowEl) return;
     setExportLoading("pdf");
     try {
-      const dataUrl = await toPng(dashboardRef.current, { quality: 0.9, backgroundColor: "#fff" });
+      const dataUrl = await toPng(flowEl, { quality: 0.9, backgroundColor: "#1a1a2e" });
       const img = new Image();
       img.src = dataUrl;
       await new Promise((resolve) => { img.onload = resolve; });
@@ -1013,7 +1019,7 @@ export default function AnalysisPage() {
       toast({ title: "Export Failed", description: "Could not export as PDF", variant: "destructive" });
     }
     setExportLoading(null);
-  }, [analysis, toast]);
+  }, [analysis, toast, getFlowElement]);
 
   const handleGenerateReadme = useCallback(async () => {
     if (!analysis) return;
@@ -1051,7 +1057,7 @@ export default function AnalysisPage() {
     setExportLoading(null);
   }, [analysis, toast]);
 
-  if (!decodedUrl) {
+  if (!decodedUrl && !analysisId) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="max-w-md">
@@ -1139,6 +1145,11 @@ export default function AnalysisPage() {
                     {repoInfo.language}
                   </Badge>
                 )}
+                {analysis.techStack?.frameworks?.slice(0, 3).map((fw) => (
+                  <Badge key={fw} variant="secondary" className="text-[10px]" data-testid={`badge-framework-${fw}`}>
+                    {fw}
+                  </Badge>
+                ))}
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                 <span className="flex items-center gap-1" data-testid="text-stars">
@@ -1204,7 +1215,7 @@ export default function AnalysisPage() {
         </div>
       </motion.div>
 
-      <div ref={dashboardRef} className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6">
         {repoInfo.description && (
           <motion.p
             initial={{ opacity: 0 }}

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { LogIn, UserPlus } from "lucide-react";
+import { LogIn, UserPlus, FileText } from "lucide-react";
 
 export function Navbar() {
   const { user, isLoading } = useAuth();
@@ -32,10 +32,17 @@ export function Navbar() {
           </span>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <ThemeToggle />
 
           {isLoading ? null : user ? (
+            <>
+            <Link href="/generate-docs">
+              <Button variant="ghost" size="sm" data-testid="button-nav-docs">
+                <FileText className="w-4 h-4 mr-1.5" />
+                Docs
+              </Button>
+            </Link>
             <Link href="/profile" data-testid="link-profile">
               <Avatar className="cursor-pointer hover-elevate h-9 w-9">
                 <AvatarFallback
@@ -49,6 +56,7 @@ export function Navbar() {
                 </AvatarFallback>
               </Avatar>
             </Link>
+            </>
           ) : (
             <>
               <Link href="/signin">

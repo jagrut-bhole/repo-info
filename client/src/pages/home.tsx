@@ -18,6 +18,7 @@ import {
   ArrowRight,
   Search,
   AlertCircle,
+  FileText,
 } from "lucide-react";
 
 const GITHUB_URL_PATTERN = /^(https?:\/\/)?(www\.)?github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
@@ -242,6 +243,17 @@ export default function Home() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          <div className="flex items-center justify-center mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setLocation("/generate-docs")}
+              data-testid="button-generate-docs"
+            >
+              <FileText className="w-4 h-4" />
+              Generate README Docs
+            </Button>
+          </div>
         </motion.div>
 
         <motion.div
