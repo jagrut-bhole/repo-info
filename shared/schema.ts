@@ -22,6 +22,7 @@ export const analyses = pgTable("analyses", {
   repoUrl: text("repo_url").notNull(),
   owner: text("owner").notNull(),
   repo: text("repo").notNull(),
+  userId: varchar("user_id").references(() => users.id),
   analysisData: jsonb("analysis_data").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

@@ -15,6 +15,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getAnalysis(id: number): Promise<Analysis | undefined>;
   getAnalysisByRepo(owner: string, repo: string): Promise<Analysis | undefined>;
+  getAnalysesByUser(userId: string): Promise<Analysis[]>;
   createAnalysis(analysis: InsertAnalysis): Promise<Analysis>;
 }
 
@@ -56,6 +57,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(analyses.createdAt))
       .limit(1);
     return analysis || undefined;
+  }
+
+  async getAnalysesByUser(userId: string): Promise<Analysis[]> {
+    return db
+      .select()
+      .from(analyses)
+      .where(eq(analyses.userId, userId))
+      .orderBy(desc(analyses.createdAt));
   }
 
   async createAnalysis(insertAnalysis: InsertAnalysis): Promise<Analysis> {
