@@ -1,16 +1,231 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import {
+  fetchRepoInfo,
+  fetchRepoTree,
+  fetchKeyFiles,
+  fetchLanguages,
+} from "./github";
+import {
+  analyzeRepository,
+  generateReadmeArchitecture,
+  generateMermaidDiagram,
+} from "./gemini";
+import type { AnalysisResult } from "@shared/schema";
+
+function parseGitHubUrl(
+  url: string,
+): { owner: string; repo: string } | null {
+  const cleaned = url.trim().replace(/\/+$/, "");
+  const patterns = [
+    /^https?:\/\/(www\.)?github\.com\/([^/]+)\/([^/]+)/,
+    /^github\.com\/([^/]+)\/([^/]+)/,
+    /^([^/]+)\/([^/]+)$/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    if (match) {
+      const owner = match[match.length - 2];
+      const repo = match[match.length - 1].replace(/\.git$/, "");
+      if (owner && repo && !owner.includes(".")) {
+        return { owner, repo };
+      }
+    }
+  }
+  return null;
+}
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: Express,
 ): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+  app.post("/api/validate-url", async (req, res) => {
+    try {
+      const { url } = req.body;
+      if (!url) {
+        return res.status(400).json({ valid: false, error: "URL is required" });
+      }
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+      const parsed = parseGitHubUrl(url);
+      if (!parsed) {
+        return res.status(400).json({
+          valid: false,
+          error:
+            "Invalid GitHub URL. Please use format: github.com/{username}/{repo}",
+        });
+      }
+
+      try {
+        const repoInfo = await fetchRepoInfo(parsed.owner, parsed.repo);
+        return res.json({
+          valid: true,
+          owner: parsed.owner,
+          repo: parsed.repo,
+          repoInfo,
+        });
+      } catch (err: any) {
+        return res.status(404).json({
+          valid: false,
+          error: `Repository not found: ${parsed.owner}/${parsed.repo}`,
+        });
+      }
+    } catch (error: any) {
+      return res.status(500).json({ valid: false, error: error.message });
+    }
+  });
+
+  app.post("/api/analyze", async (req, res) => {
+    try {
+      const { url, forceRefresh } = req.body;
+      if (!url) {
+        return res.status(400).json({ error: "URL is required" });
+      }
+
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({
+          error: "Gemini API key is not configured. Please set the GEMINI_API_KEY environment variable.",
+        });
+      }
+
+      const parsed = parseGitHubUrl(url);
+      if (!parsed) {
+        return res.status(400).json({
+          error:
+            "Invalid GitHub URL. Please use format: github.com/{username}/{repo}",
+        });
+      }
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      const sendEvent = (data: any) => {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+
+      if (!forceRefresh) {
+        const cached = await storage.getAnalysisByRepo(
+          parsed.owner,
+          parsed.repo,
+        );
+        if (cached) {
+          const cachedData = cached.analysisData as AnalysisResult;
+          sendEvent({ step: "info", message: "Loading cached analysis..." });
+          sendEvent({
+            step: "complete",
+            message: "Analysis complete!",
+            id: cached.id,
+            analysis: cachedData,
+          });
+          return res.end();
+        }
+      }
+
+      sendEvent({ step: "info", message: "Fetching repository information..." });
+      const repoInfo = await fetchRepoInfo(parsed.owner, parsed.repo);
+
+      sendEvent({ step: "tree", message: "Scanning file structure..." });
+      const fileTree = await fetchRepoTree(parsed.owner, parsed.repo);
+
+      sendEvent({
+        step: "languages",
+        message: "Detecting programming languages...",
+      });
+      const languages = await fetchLanguages(parsed.owner, parsed.repo);
+
+      sendEvent({
+        step: "files",
+        message: `Reading ${Math.min(fileTree.length, 60)} key files...`,
+      });
+      const keyFiles = await fetchKeyFiles(parsed.owner, parsed.repo, fileTree);
+
+      sendEvent({
+        step: "analysis",
+        message: "AI is analyzing the codebase architecture...",
+      });
+      const analysis = await analyzeRepository(
+        repoInfo,
+        fileTree,
+        keyFiles,
+        languages,
+      );
+
+      sendEvent({
+        step: "saving",
+        message: "Saving analysis results...",
+      });
+
+      const saved = await storage.createAnalysis({
+        repoUrl: url,
+        owner: parsed.owner,
+        repo: parsed.repo,
+        analysisData: analysis,
+      });
+
+      sendEvent({
+        step: "complete",
+        message: "Analysis complete!",
+        id: saved.id,
+        analysis,
+      });
+
+      res.end();
+    } catch (error: any) {
+      console.error("Analysis error:", error);
+      if (res.headersSent) {
+        res.write(
+          `data: ${JSON.stringify({ step: "error", message: error.message })}\n\n`,
+        );
+        res.end();
+      } else {
+        res.status(500).json({ error: error.message });
+      }
+    }
+  });
+
+  app.get("/api/analysis/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const analysis = await storage.getAnalysis(id);
+      if (!analysis) {
+        return res.status(404).json({ error: "Analysis not found" });
+      }
+      return res.json({
+        id: analysis.id,
+        analysis: analysis.analysisData as AnalysisResult,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/generate-readme", async (req, res) => {
+    try {
+      const { analysis } = req.body;
+      if (!analysis) {
+        return res.status(400).json({ error: "Analysis data is required" });
+      }
+      const readme = await generateReadmeArchitecture(analysis);
+      return res.json({ readme });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/generate-mermaid", async (req, res) => {
+    try {
+      const { analysis } = req.body;
+      if (!analysis) {
+        return res.status(400).json({ error: "Analysis data is required" });
+      }
+      const mermaid = await generateMermaidDiagram(analysis);
+      return res.json({ mermaid });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
 
   return httpServer;
 }
