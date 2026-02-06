@@ -9,6 +9,7 @@ import { toPng, toSvg } from "html-to-image";
 import jsPDF from "jspdf";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,11 +65,11 @@ import type {
 } from "@shared/schema";
 
 const NODE_COLORS = {
-  api: "hsl(204 88% 53%)",
-  frontend: "hsl(160 100% 36%)",
-  database: "hsl(42 93% 56%)",
-  external: "hsl(341 75% 51%)",
-  group: "hsl(9 75% 61%)",
+  api: { bg: "hsl(204 88% 53%)", text: "#fff" },
+  frontend: { bg: "hsl(160 100% 36%)", text: "#fff" },
+  database: { bg: "hsl(42 93% 56%)", text: "#1a1a1a" },
+  external: { bg: "hsl(341 75% 51%)", text: "#fff" },
+  group: { bg: "hsl(9 75% 61%)", text: "#fff" },
 };
 
 const METHOD_COLORS: Record<string, string> = {
@@ -122,8 +123,8 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
       position: { x: xBase - 40, y: yOffset },
       data: { label: groupName },
       style: {
-        background: NODE_COLORS.group,
-        color: "#fff",
+        background: NODE_COLORS.group.bg,
+        color: NODE_COLORS.group.text,
         padding: "8px 16px",
         borderRadius: "8px",
         fontWeight: 600,
@@ -143,8 +144,8 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
         position: { x: xBase, y: yOffset + i * 70 },
         data: { label: `${ep.method} ${ep.path}` },
         style: {
-          background: NODE_COLORS.api,
-          color: "#fff",
+          background: NODE_COLORS.api.bg,
+          color: NODE_COLORS.api.text,
           padding: "6px 14px",
           borderRadius: "6px",
           fontSize: "11px",
@@ -161,7 +162,7 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
         target: nodeId,
         type: "smoothstep",
         animated: false,
-        style: { stroke: NODE_COLORS.group, strokeWidth: 1.5 },
+        style: { stroke: NODE_COLORS.group.bg, strokeWidth: 1.5 },
       });
     });
     yOffset += endpoints.length * 70 + 40;
@@ -176,8 +177,8 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
         position: { x: 0, y: fY },
         data: { label: flow.frontendComponent },
         style: {
-          background: NODE_COLORS.frontend,
-          color: "#fff",
+          background: NODE_COLORS.frontend.bg,
+          color: NODE_COLORS.frontend.text,
           padding: "6px 14px",
           borderRadius: "6px",
           fontSize: "11px",
@@ -198,8 +199,8 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
             target: targetId,
             type: "smoothstep",
             animated: true,
-            style: { stroke: NODE_COLORS.frontend, strokeWidth: 1.5 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: NODE_COLORS.frontend },
+            style: { stroke: NODE_COLORS.frontend.bg, strokeWidth: 1.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: NODE_COLORS.frontend.bg },
           });
         }
       });
@@ -214,8 +215,8 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
       position: { x: dbX, y: 0 },
       data: { label: `${analysis.databaseMapping.database || "Database"} (${analysis.databaseMapping.orm || "ORM"})` },
       style: {
-        background: NODE_COLORS.database,
-        color: "#fff",
+        background: NODE_COLORS.database.bg,
+        color: NODE_COLORS.database.text,
         padding: "8px 16px",
         borderRadius: "8px",
         fontWeight: 600,
@@ -234,8 +235,8 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
         position: { x: dbX + 40, y: 60 + i * 60 },
         data: { label: `${model.name} → ${model.table}` },
         style: {
-          background: `${NODE_COLORS.database}cc`,
-          color: "#fff",
+          background: `${NODE_COLORS.database.bg}cc`,
+          color: NODE_COLORS.database.text,
           padding: "5px 12px",
           borderRadius: "6px",
           fontSize: "11px",
@@ -250,7 +251,7 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
         source: "database-node",
         target: mId,
         type: "smoothstep",
-        style: { stroke: NODE_COLORS.database, strokeWidth: 1.5 },
+        style: { stroke: NODE_COLORS.database.bg, strokeWidth: 1.5 },
       });
     });
   }
@@ -264,8 +265,8 @@ function buildFlowElements(analysis: AnalysisResult): { nodes: Node[]; edges: Ed
         position: { x: extX, y: i * 80 },
         data: { label: `${svc.name} (${svc.type})` },
         style: {
-          background: NODE_COLORS.external,
-          color: "#fff",
+          background: NODE_COLORS.external.bg,
+          color: NODE_COLORS.external.text,
           padding: "6px 14px",
           borderRadius: "6px",
           fontSize: "11px",
@@ -367,7 +368,7 @@ function ArchitectureFlowTab({ analysis }: { analysis: AnalysisResult }) {
       <div className="flex items-center gap-3 flex-wrap">
         {Object.entries(NODE_COLORS).map(([key, color]) => (
           <div key={key} className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color.bg }} />
             <span className="text-xs text-muted-foreground capitalize">{key === "api" ? "API Endpoints" : key === "group" ? "Groups" : key}</span>
           </div>
         ))}
@@ -488,7 +489,7 @@ function FrontendBackendTab({ flows }: { flows: FrontendBackendFlow[] }) {
         <Card key={i} className="hover-elevate" data-testid={`card-flow-${i}`}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 flex-wrap mb-3">
-              <Code2 className="w-4 h-4 shrink-0" style={{ color: NODE_COLORS.frontend }} />
+              <Code2 className="w-4 h-4 shrink-0" style={{ color: NODE_COLORS.frontend.bg }} />
               <span className="font-semibold text-sm">{flow.frontendComponent}</span>
               <span className="text-xs text-muted-foreground">({flow.frontendFile})</span>
             </div>
@@ -552,9 +553,9 @@ function DatabaseTab({ mapping }: { mapping: DatabaseMapping }) {
               <div className="flex items-center gap-2 mb-2">
                 <div
                   className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: `${NODE_COLORS.database}20` }}
+                  style={{ backgroundColor: `${NODE_COLORS.database.bg}20` }}
                 >
-                  <Database className="w-3.5 h-3.5" style={{ color: NODE_COLORS.database }} />
+                  <Database className="w-3.5 h-3.5" style={{ color: NODE_COLORS.database.bg }} />
                 </div>
                 <span className="font-semibold text-sm">{model.name}</span>
               </div>
@@ -604,9 +605,9 @@ function ExternalServicesTab({ services }: { services: ExternalService[] }) {
             <div className="flex items-center gap-2 mb-2">
               <div
                 className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-                style={{ backgroundColor: `${NODE_COLORS.external}15` }}
+                style={{ backgroundColor: `${NODE_COLORS.external.bg}15` }}
               >
-                <Globe className="w-4 h-4" style={{ color: NODE_COLORS.external }} />
+                <Globe className="w-4 h-4" style={{ color: NODE_COLORS.external.bg }} />
               </div>
               <div className="min-w-0">
                 <h4 className="font-semibold text-sm">{svc.name}</h4>
@@ -837,10 +838,12 @@ export default function AnalysisPage() {
   const search = useSearch();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { token } = useAuth();
 
   const params = new URLSearchParams(search);
   const encodedUrl = params.get("url");
   const decodedUrl = encodedUrl ? decodeURIComponent(encodedUrl) : "";
+  const analysisId = params.get("id");
 
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [steps, setSteps] = useState<AnalysisStep[]>([]);
@@ -850,14 +853,36 @@ export default function AnalysisPage() {
   const dashboardRef = useRef<HTMLDivElement>(null);
   const hasStarted = useRef(false);
 
+  useEffect(() => {
+    if (!analysisId || hasStarted.current) return;
+    hasStarted.current = true;
+
+    const loadById = async () => {
+      try {
+        const res = await fetch(`/api/analysis/${analysisId}`);
+        if (!res.ok) throw new Error("Analysis not found");
+        const data = await res.json();
+        setAnalysis(data.analysis);
+        setIsLoading(false);
+      } catch (err: any) {
+        setError(err.message || "Failed to load analysis");
+        setIsLoading(false);
+      }
+    };
+    loadById();
+  }, [analysisId]);
+
   const runAnalysis = useCallback(async () => {
-    if (!decodedUrl || hasStarted.current) return;
+    if (!decodedUrl || hasStarted.current || analysisId) return;
     hasStarted.current = true;
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const response = await fetch("/api/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ url: decodedUrl }),
       });
 
@@ -932,11 +957,13 @@ export default function AnalysisPage() {
         variant: "destructive",
       });
     }
-  }, [decodedUrl, toast]);
+  }, [decodedUrl, analysisId, token, toast]);
 
   useEffect(() => {
-    runAnalysis();
-  }, [runAnalysis]);
+    if (!analysisId) {
+      runAnalysis();
+    }
+  }, [runAnalysis, analysisId]);
 
   const handleExportPng = useCallback(async () => {
     if (!dashboardRef.current) return;

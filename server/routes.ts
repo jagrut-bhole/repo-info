@@ -13,6 +13,14 @@ import {
   generateMermaidDiagram,
 } from "./gemini";
 import type { AnalysisResult } from "@shared/schema";
+import {
+  authMiddleware,
+  optionalAuthMiddleware,
+  hashPassword,
+  comparePassword,
+  signToken,
+  verifyToken,
+} from "./auth";
 
 function parseGitHubUrl(
   url: string,
@@ -41,6 +49,98 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  app.post("/api/auth/signup", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res
+          .status(400)
+          .json({ error: "Username and password are required" });
+      }
+      if (username.length < 3) {
+        return res
+          .status(400)
+          .json({ error: "Username must be at least 3 characters" });
+      }
+      if (password.length < 6) {
+        return res
+          .status(400)
+          .json({ error: "Password must be at least 6 characters" });
+      }
+
+      const existing = await storage.getUserByUsername(username);
+      if (existing) {
+        return res.status(409).json({ error: "Username already taken" });
+      }
+
+      const hashedPassword = await hashPassword(password);
+      const user = await storage.createUser({
+        username,
+        password: hashedPassword,
+      });
+
+      const token = signToken({ userId: user.id, username: user.username });
+      return res.json({
+        token,
+        user: { id: user.id, username: user.username },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/auth/signin", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res
+          .status(400)
+          .json({ error: "Username and password are required" });
+      }
+
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ error: "Invalid username or password" });
+      }
+
+      const valid = await comparePassword(password, user.password);
+      if (!valid) {
+        return res.status(401).json({ error: "Invalid username or password" });
+      }
+
+      const token = signToken({ userId: user.id, username: user.username });
+      return res.json({
+        token,
+        user: { id: user.id, username: user.username },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/auth/me", authMiddleware, async (req, res) => {
+    return res.json({
+      user: { id: req.user!.userId, username: req.user!.username },
+    });
+  });
+
+  app.get("/api/user/analyses", authMiddleware, async (req, res) => {
+    try {
+      const analyses = await storage.getAnalysesByUser(req.user!.userId);
+      return res.json(
+        analyses.map((a) => ({
+          id: a.id,
+          repoUrl: a.repoUrl,
+          owner: a.owner,
+          repo: a.repo,
+          createdAt: a.createdAt,
+        })),
+      );
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/validate-url", async (req, res) => {
     try {
       const { url } = req.body;
@@ -76,7 +176,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/analyze", async (req, res) => {
+  app.post("/api/analyze", optionalAuthMiddleware, async (req, res) => {
     try {
       const { url, forceRefresh } = req.body;
       if (!url) {
@@ -161,6 +261,7 @@ export async function registerRoutes(
         repoUrl: url,
         owner: parsed.owner,
         repo: parsed.repo,
+        userId: req.user?.userId || null,
         analysisData: analysis,
       });
 
