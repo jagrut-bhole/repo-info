@@ -5,7 +5,7 @@ import * as schema from "@shared/schema";
 const { Pool } = pg;
 
 const connectionString =
-  process.env.DATABASE_URL;
+  process.env.DATABASE_URL || process.env.BACKUP_DATABASE_URL;
 
 if (!connectionString) {
   throw new Error(
