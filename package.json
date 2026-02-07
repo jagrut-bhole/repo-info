@@ -6,12 +6,16 @@
   "scripts": {
     "dev": "tsx server/index.ts",
     "build": "tsx script/build.ts",
+    "build:worker": "tsx script/build-worker.ts",
     "start": "node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "deploy": "npm run build:worker && npx wrangler deploy",
+    "dev:worker": "npx wrangler dev"
   },
   "dependencies": {
     "@google/genai": "^1.40.0",
+    "@hono/node-server": "^1.19.9",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@octokit/rest": "^22.0.0",
@@ -60,6 +64,7 @@
     "express": "^5.0.1",
     "express-session": "^1.18.1",
     "framer-motion": "^11.13.1",
+    "hono": "^4.11.8",
     "html-to-image": "^1.11.13",
     "input-otp": "^1.4.2",
     "jsonwebtoken": "^9.0.3",

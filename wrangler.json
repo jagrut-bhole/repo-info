@@ -1,0 +1,11 @@
+{
+  "name": "repo-info-worker",
+  "main": "dist/worker.js",
+  "compatibility_date": "2024-01-01",
+  "assets": {
+    "directory": "./dist/public"
+  },
+  "vars": {
+    "NODE_ENV": "production"
+  }
+}
