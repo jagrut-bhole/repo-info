@@ -7,4 +7,4 @@ vite.config.ts.*
 .env
 .env/*
 .vercel
-DEPLOYMENT.md
+TROUBLESHOOTING.md

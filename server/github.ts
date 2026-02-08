@@ -5,6 +5,7 @@ let connectionSettings: any;
 async function getAccessToken() {
   // Check if GITHUB_TOKEN is set (for local development)
   if (process.env.GITHUB_TOKEN) {
+    console.log("[GitHub Auth] Using GITHUB_TOKEN from environment");
     return process.env.GITHUB_TOKEN;
   }
 
@@ -14,6 +15,7 @@ async function getAccessToken() {
     connectionSettings.settings.expires_at &&
     new Date(connectionSettings.settings.expires_at).getTime() > Date.now()
   ) {
+    console.log("[GitHub Auth] Using cached Replit connector token");
     return connectionSettings.settings.access_token;
   }
 
@@ -26,11 +28,15 @@ async function getAccessToken() {
 
   if (!xReplitToken) {
     console.error("[GitHub Auth] No authentication method available");
+    console.error("[GitHub Auth] GITHUB_TOKEN:", !!process.env.GITHUB_TOKEN);
+    console.error("[GitHub Auth] REPL_IDENTITY:", !!process.env.REPL_IDENTITY);
+    console.error("[GitHub Auth] WEB_REPL_RENEWAL:", !!process.env.WEB_REPL_RENEWAL);
     throw new Error(
       "GitHub authentication not configured. Please set GITHUB_TOKEN environment variable. Without authentication, GitHub API requests are severely rate-limited (60/hour). Create a token at: https://github.com/settings/tokens"
     );
   }
 
+  console.log("[GitHub Auth] Fetching Replit connector settings");
   connectionSettings = await fetch(
     "https://" +
     hostname +
@@ -53,6 +59,7 @@ async function getAccessToken() {
     console.error("[GitHub Auth] Replit connector failed");
     throw new Error("GitHub not connected");
   }
+  console.log("[GitHub Auth] Replit connector token obtained");
   return accessToken;
 }
 
@@ -75,12 +82,26 @@ export async function fetchRepoInfo(owner: string, repo: string) {
       url: data.html_url,
     };
   } catch (error: any) {
-    console.error(`[GitHub API] Failed to fetch repo info for ${owner}/${repo}:`, error.message);
+    console.error(`[GitHub API] Failed to fetch repo info for ${owner}/${repo}:`, {
+      message: error.message,
+      status: error.status,
+      response: error.response?.data,
+    });
+    
     if (error.status === 404) {
       throw new Error(`Repository not found: ${owner}/${repo}. Make sure it exists and is public.`);
     }
-    if (error.status === 403 && error.message?.includes('rate limit')) {
-      throw new Error('GitHub API rate limit exceeded. Please set a GITHUB_TOKEN environment variable to increase limits from 60 to 5000 requests/hour.');
+    if (error.status === 401) {
+      throw new Error('GitHub authentication failed. Please check your GITHUB_TOKEN is valid and not expired.');
+    }
+    if (error.status === 403) {
+      if (error.message?.includes('rate limit')) {
+        throw new Error('GitHub API rate limit exceeded. Please set a valid GITHUB_TOKEN environment variable to increase limits from 60 to 5000 requests/hour.');
+      }
+      if (error.message?.includes('abuse')) {
+        throw new Error('GitHub API abuse detection triggered. Please wait a moment and try again.');
+      }
+      throw new Error(`GitHub API access forbidden: ${error.message || 'Check your token permissions'}`);
     }
     throw error;
   }

@@ -207,13 +207,18 @@ export async function registerRoutes(
   });
 
   app.post("/api/analyze", optionalAuthMiddleware, async (req, res) => {
+    const startTime = Date.now();
+    console.log("[API] /api/analyze request started", { url: req.body.url });
+    
     try {
       const { url, forceRefresh } = req.body;
       if (!url) {
+        console.error("[API] Error: URL is required");
         return res.status(400).json({ error: "URL is required" });
       }
 
       if (!process.env.GEMINI_API_KEY) {
+        console.error("[API] Error: GEMINI_API_KEY not configured");
         return res.status(500).json({
           error: "Gemini API key is not configured. Please set the GEMINI_API_KEY environment variable.",
         });
@@ -221,18 +226,26 @@ export async function registerRoutes(
 
       const parsed = parseGitHubUrl(url);
       if (!parsed) {
+        console.error("[API] Error: Invalid GitHub URL format", { url });
         return res.status(400).json({
           error:
             "Invalid GitHub URL. Please use format: github.com/{username}/{repo}",
         });
       }
+      
+      console.log("[API] Parsed GitHub URL:", parsed);
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
 
       const sendEvent = (data: any) => {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        console.log("[SSE] Sending event:", data.step, data.message?.substring(0, 50));
+        try {
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
+        } catch (writeError: any) {
+          console.error("[SSE] Failed to write event:", writeError.message);
+        }
       };
 
       try {
@@ -255,16 +268,22 @@ export async function registerRoutes(
         }
 
         sendEvent({ step: "info", message: "Fetching repository information..." });
+        console.log("[API] Fetching repo info for:", `${parsed.owner}/${parsed.repo}`);
         const repoInfo = await fetchRepoInfo(parsed.owner, parsed.repo);
+        console.log("[API] Repo info fetched successfully");
 
         sendEvent({ step: "tree", message: "Scanning file structure..." });
+        console.log("[API] Fetching file tree");
         const fileTree = await fetchRepoTree(parsed.owner, parsed.repo);
+        console.log("[API] File tree fetched:", fileTree.length, "files");
 
         sendEvent({
           step: "languages",
           message: "Detecting programming languages...",
         });
+        console.log("[API] Fetching languages");
         const languages = await fetchLanguages(parsed.owner, parsed.repo);
+        console.log("[API] Languages fetched:", languages.length, "languages");
 
         sendEvent({
           step: "files",
@@ -305,7 +324,11 @@ export async function registerRoutes(
 
       res.end();
       } catch (innerError: any) {
-        console.error("Analysis streaming error:", innerError);
+        console.error("[API] Analysis streaming error:", {
+          message: innerError.message,
+          status: innerError.status,
+          stack: innerError.stack?.substring(0, 200),
+        });
         let userMessage = innerError.message || "An unexpected error occurred";
         if (
           userMessage.includes("JSON") ||
@@ -315,11 +338,29 @@ export async function registerRoutes(
           userMessage =
             "The AI returned an incomplete response. This can happen with very large repositories. Please try again — results may vary.";
         }
-        sendEvent({ step: "error", message: userMessage });
-        res.end();
+        
+        // Always send error event, even if streaming hasn't started
+        try {
+          sendEvent({ step: "error", message: userMessage });
+        } catch (sendError) {
+          console.error("[API] Failed to send error event:", sendError);
+        }
+        
+        try {
+          res.end();
+        } catch (endError) {
+          console.error("[API] Failed to end response:", endError);
+        }
       }
     } catch (error: any) {
-      console.error("Analysis error:", error);
+      const elapsed = Date.now() - startTime;
+      console.error("[API] Top-level analysis error:", {
+        message: error.message,
+        status: error.status,
+        elapsed: `${elapsed}ms`,
+        stack: error.stack?.substring(0, 300),
+      });
+      
       let userMessage = error.message || "An unexpected error occurred";
       if (
         userMessage.includes("JSON") ||
@@ -329,15 +370,24 @@ export async function registerRoutes(
         userMessage =
           "The AI returned an incomplete response. This can happen with very large repositories. Please try again — results may vary.";
       }
-      if (res.headersSent) {
-        res.write(
-          `data: ${JSON.stringify({ step: "error", message: userMessage })}\n\n`,
-        );
-        res.end();
-      } else {
-        res.status(500).json({ error: userMessage });
+      
+      try {
+        if (res.headersSent) {
+          console.log("[API] Headers already sent, writing error to stream");
+          res.write(
+            `data: ${JSON.stringify({ step: "error", message: userMessage })}\n\n`,
+          );
+          res.end();
+        } else {
+          console.log("[API] Headers not sent, returning JSON error");
+          res.status(500).json({ error: userMessage });
+        }
+      } catch (responseError: any) {
+        console.error("[API] Failed to send error response:", responseError.message);
       }
     }
+    
+    console.log("[API] /api/analyze request completed in", Date.now() - startTime, "ms");
   });
 
   app.get("/api/analysis/:id", async (req, res) => {
