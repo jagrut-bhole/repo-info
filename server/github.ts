@@ -25,8 +25,9 @@ async function getAccessToken() {
       : null;
 
   if (!xReplitToken) {
+    console.error("[GitHub Auth] No authentication method available");
     throw new Error(
-      "GitHub authentication not configured. Please set GITHUB_TOKEN environment variable or configure Replit GitHub connector."
+      "GitHub authentication not configured. Please set GITHUB_TOKEN environment variable. Without authentication, GitHub API requests are severely rate-limited (60/hour). Create a token at: https://github.com/settings/tokens"
     );
   }
 
@@ -49,6 +50,7 @@ async function getAccessToken() {
     connectionSettings.settings?.oauth?.credentials?.access_token;
 
   if (!connectionSettings || !accessToken) {
+    console.error("[GitHub Auth] Replit connector failed");
     throw new Error("GitHub not connected");
   }
   return accessToken;
@@ -60,38 +62,57 @@ async function getUncachableGitHubClient() {
 }
 
 export async function fetchRepoInfo(owner: string, repo: string) {
-  const octokit = await getUncachableGitHubClient();
-  const { data } = await octokit.repos.get({ owner, repo });
-  return {
-    name: data.name,
-    owner: data.owner.login,
-    description: data.description || "",
-    stars: data.stargazers_count,
-    forks: data.forks_count,
-    language: data.language || "Unknown",
-    url: data.html_url,
-  };
+  try {
+    const octokit = await getUncachableGitHubClient();
+    const { data } = await octokit.repos.get({ owner, repo });
+    return {
+      name: data.name,
+      owner: data.owner.login,
+      description: data.description || "",
+      stars: data.stargazers_count,
+      forks: data.forks_count,
+      language: data.language || "Unknown",
+      url: data.html_url,
+    };
+  } catch (error: any) {
+    console.error(`[GitHub API] Failed to fetch repo info for ${owner}/${repo}:`, error.message);
+    if (error.status === 404) {
+      throw new Error(`Repository not found: ${owner}/${repo}. Make sure it exists and is public.`);
+    }
+    if (error.status === 403 && error.message?.includes('rate limit')) {
+      throw new Error('GitHub API rate limit exceeded. Please set a GITHUB_TOKEN environment variable to increase limits from 60 to 5000 requests/hour.');
+    }
+    throw error;
+  }
 }
 
 export async function fetchRepoTree(owner: string, repo: string) {
-  const octokit = await getUncachableGitHubClient();
-  const { data: refData } = await octokit.git.getRef({
-    owner,
-    repo,
-    ref: "heads/" + (await getDefaultBranch(owner, repo)),
-  });
+  try {
+    const octokit = await getUncachableGitHubClient();
+    const { data: refData } = await octokit.git.getRef({
+      owner,
+      repo,
+      ref: "heads/" + (await getDefaultBranch(owner, repo)),
+    });
 
-  const { data: treeData } = await octokit.git.getTree({
-    owner,
-    repo,
-    tree_sha: refData.object.sha,
-    recursive: "true",
-  });
+    const { data: treeData } = await octokit.git.getTree({
+      owner,
+      repo,
+      tree_sha: refData.object.sha,
+      recursive: "true",
+    });
 
-  return treeData.tree
-    .filter((item) => item.type === "blob")
-    .map((item) => item.path || "")
-    .filter(Boolean);
+    return treeData.tree
+      .filter((item) => item.type === "blob")
+      .map((item) => item.path || "")
+      .filter(Boolean);
+  } catch (error: any) {
+    console.error(`[GitHub API] Failed to fetch repo tree for ${owner}/${repo}:`, error.message);
+    if (error.status === 403 && error.message?.includes('rate limit')) {
+      throw new Error('GitHub API rate limit exceeded. Please set a GITHUB_TOKEN environment variable.');
+    }
+    throw error;
+  }
 }
 
 async function getDefaultBranch(owner: string, repo: string): Promise<string> {
@@ -244,11 +265,20 @@ export async function fetchLanguages(
   owner: string,
   repo: string,
 ): Promise<{ name: string; percentage: number }[]> {
-  const octokit = await getUncachableGitHubClient();
-  const { data } = await octokit.repos.listLanguages({ owner, repo });
-  const total = Object.values(data).reduce((sum, val) => sum + val, 0);
-  return Object.entries(data).map(([name, bytes]) => ({
-    name,
-    percentage: Math.round((bytes / total) * 100),
-  }));
+  try {
+    const octokit = await getUncachableGitHubClient();
+    const { data } = await octokit.repos.listLanguages({ owner, repo });
+    const total = Object.values(data).reduce((sum, val) => sum + val, 0);
+    return Object.entries(data).map(([name, bytes]) => ({
+      name,
+      percentage: Math.round((bytes / total) * 100),
+    }));
+  } catch (error: any) {
+    console.error(`[GitHub API] Failed to fetch languages for ${owner}/${repo}:`, error.message);
+    if (error.status === 403 && error.message?.includes('rate limit')) {
+      throw new Error('GitHub API rate limit exceeded. Please set a GITHUB_TOKEN environment variable.');
+    }
+    // Return empty array as fallback for languages
+    return [];
+  }
 }

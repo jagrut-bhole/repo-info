@@ -50,6 +50,35 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
+  // Health check endpoint
+  app.get("/api/health", (req, res) => {
+    const health = {
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      environment: {
+        nodeEnv: process.env.NODE_ENV || "development",
+        hasGithubToken: !!process.env.GITHUB_TOKEN,
+        hasGeminiApiKey: !!process.env.GEMINI_API_KEY,
+        hasReplitConnector: !!(process.env.REPL_IDENTITY || process.env.WEB_REPL_RENEWAL),
+      },
+      warnings: [] as string[],
+    };
+
+    if (!process.env.GITHUB_TOKEN && !process.env.REPL_IDENTITY && !process.env.WEB_REPL_RENEWAL) {
+      health.warnings.push(
+        "No GitHub authentication configured. API rate limit is 60 requests/hour. Set GITHUB_TOKEN for 5000 requests/hour."
+      );
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      health.warnings.push(
+        "GEMINI_API_KEY not configured. Repository analysis will fail."
+      );
+    }
+
+    res.json(health);
+  });
+
   app.post("/api/auth/signup", async (req, res) => {
     try {
       const { username, password } = req.body;
@@ -206,48 +235,49 @@ export async function registerRoutes(
         res.write(`data: ${JSON.stringify(data)}\n\n`);
       };
 
-      if (!forceRefresh) {
-        const cached = await storage.getAnalysisByRepo(
-          parsed.owner,
-          parsed.repo,
-        );
-        if (cached) {
-          const cachedData = cached.analysisData as AnalysisResult;
-          sendEvent({ step: "info", message: "Loading cached analysis..." });
-          sendEvent({
-            step: "complete",
-            message: "Analysis complete!",
-            id: cached.id,
-            analysis: cachedData,
-          });
-          return res.end();
+      try {
+        if (!forceRefresh) {
+          const cached = await storage.getAnalysisByRepo(
+            parsed.owner,
+            parsed.repo,
+          );
+          if (cached) {
+            const cachedData = cached.analysisData as AnalysisResult;
+            sendEvent({ step: "info", message: "Loading cached analysis..." });
+            sendEvent({
+              step: "complete",
+              message: "Analysis complete!",
+              id: cached.id,
+              analysis: cachedData,
+            });
+            return res.end();
+          }
         }
-      }
 
-      sendEvent({ step: "info", message: "Fetching repository information..." });
-      const repoInfo = await fetchRepoInfo(parsed.owner, parsed.repo);
+        sendEvent({ step: "info", message: "Fetching repository information..." });
+        const repoInfo = await fetchRepoInfo(parsed.owner, parsed.repo);
 
-      sendEvent({ step: "tree", message: "Scanning file structure..." });
-      const fileTree = await fetchRepoTree(parsed.owner, parsed.repo);
+        sendEvent({ step: "tree", message: "Scanning file structure..." });
+        const fileTree = await fetchRepoTree(parsed.owner, parsed.repo);
 
-      sendEvent({
-        step: "languages",
-        message: "Detecting programming languages...",
-      });
-      const languages = await fetchLanguages(parsed.owner, parsed.repo);
+        sendEvent({
+          step: "languages",
+          message: "Detecting programming languages...",
+        });
+        const languages = await fetchLanguages(parsed.owner, parsed.repo);
 
-      sendEvent({
-        step: "files",
-        message: `Reading ${Math.min(fileTree.length, 60)} key files...`,
-      });
-      const keyFiles = await fetchKeyFiles(parsed.owner, parsed.repo, fileTree);
+        sendEvent({
+          step: "files",
+          message: `Reading ${Math.min(fileTree.length, 60)} key files...`,
+        });
+        const keyFiles = await fetchKeyFiles(parsed.owner, parsed.repo, fileTree);
 
-      sendEvent({
-        step: "analysis",
-        message: "AI is analyzing the codebase architecture...",
-      });
-      const analysis = await analyzeRepository(
-        repoInfo,
+        sendEvent({
+          step: "analysis",
+          message: "AI is analyzing the codebase architecture...",
+        });
+        const analysis = await analyzeRepository(
+          repoInfo,
         fileTree,
         keyFiles,
         languages,
@@ -274,6 +304,20 @@ export async function registerRoutes(
       });
 
       res.end();
+      } catch (innerError: any) {
+        console.error("Analysis streaming error:", innerError);
+        let userMessage = innerError.message || "An unexpected error occurred";
+        if (
+          userMessage.includes("JSON") ||
+          userMessage.includes("parse") ||
+          userMessage.includes("Unexpected token")
+        ) {
+          userMessage =
+            "The AI returned an incomplete response. This can happen with very large repositories. Please try again — results may vary.";
+        }
+        sendEvent({ step: "error", message: userMessage });
+        res.end();
+      }
     } catch (error: any) {
       console.error("Analysis error:", error);
       let userMessage = error.message || "An unexpected error occurred";
