@@ -132,17 +132,45 @@ Rules:
 - Be specific with file paths from the actual file tree
 - Return ONLY valid JSON, no markdown formatting`;
 
-  const response = await ai.models.generateContent({
+  let response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
     contents: prompt,
     config: {
       responseMimeType: "application/json",
-      maxOutputTokens: 16384,
+      maxOutputTokens: 32768, // Increased limit for larger repos
     },
   });
 
+  // Check if response was truncated and retry with reduced context if needed
+  if (response.candidates?.[0]?.finishReason === "MAX_TOKENS" && keyFiles.length > 5) {
+    console.log("Response truncated, retrying with fewer files...");
+    const reducedKeyFiles = keyFiles.slice(0, Math.ceil(keyFiles.length / 2));
+    const reducedKeyFilesStr = reducedKeyFiles
+      .map((f) => `--- FILE: ${f.path} ---\n${f.content}\n--- END FILE ---`)
+      .join("\n\n");
+    
+    const reducedPrompt = prompt.replace(
+      /KEY FILES:[\s\S]*?Provide a detailed/,
+      `KEY FILES:\n${reducedKeyFilesStr}\n\nProvide a detailed`
+    );
+    
+    response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: reducedPrompt,
+      config: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 32768,
+      },
+    });
+  }
+
   const rawText = response.text || "{}";
   let parsed: any;
+
+  // Check if response is still truncated
+  if (response.candidates?.[0]?.finishReason === "MAX_TOKENS") {
+    console.warn("Response may be incomplete due to token limit");
+  }
 
   try {
     parsed = JSON.parse(rawText);
@@ -154,12 +182,28 @@ Rules:
       console.error(
         "Failed to parse Gemini JSON. Response length:",
         rawText.length,
+        "Finish reason:",
+        response.candidates?.[0]?.finishReason,
         "Error:",
         innerErr.message,
       );
-      throw new Error(
-        "The AI returned an incomplete response. This can happen with very large repositories. Please try again.",
-      );
+      
+      // Try to salvage partial response
+      const partialMatch = rawText.match(/\{[\s\S]*\}/); 
+      if (partialMatch) {
+        try {
+          parsed = JSON.parse(partialMatch[0]);
+          console.log("Successfully recovered partial response");
+        } catch {
+          throw new Error(
+            "The repository is too large for a complete analysis. Try analyzing a smaller repository or specific components.",
+          );
+        }
+      } else {
+        throw new Error(
+          "The repository is too large for a complete analysis. Try analyzing a smaller repository or specific components.",
+        );
+      }
     }
   }
 
@@ -211,7 +255,7 @@ Return ONLY the markdown content, starting with ## Architecture`;
     model: "gemini-2.5-flash",
     contents: prompt,
     config: {
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192, // Increased for better coverage
     },
   });
 

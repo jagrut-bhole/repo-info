@@ -5,7 +5,7 @@ let connectionSettings: any;
 async function getAccessToken() {
   // Check if GITHUB_TOKEN is set (for local development)
   if (process.env.GITHUB_TOKEN) {
-    console.log("[GitHub Auth] Using GITHUB_TOKEN from environment");
+    // console.log("[GitHub Auth] Using GITHUB_TOKEN from environment");
     return process.env.GITHUB_TOKEN;
   }
 

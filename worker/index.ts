@@ -53,7 +53,7 @@ function parseGitHubUrl(url: string): { owner: string; repo: string } | null {
     const cleaned = url.trim().replace(/\/+$/, "");
     const patterns = [
         /^https?:\/\/(www\.)?github\.com\/([^/]+)\/([^/]+)/,
-        /^github\.com\/([^/]+)\/([^/]+)/,
+        /^github\.com\/([^/]+)\/([^/]+)$/,
         /^([^/]+)\/([^/]+)$/,
     ];
 

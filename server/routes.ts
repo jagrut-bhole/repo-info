@@ -330,13 +330,14 @@ export async function registerRoutes(
           stack: innerError.stack?.substring(0, 200),
         });
         let userMessage = innerError.message || "An unexpected error occurred";
+        // Use the improved error message from gemini.ts
         if (
           userMessage.includes("JSON") ||
           userMessage.includes("parse") ||
-          userMessage.includes("Unexpected token")
+          userMessage.includes("Unexpected token") ||
+          userMessage.includes("incomplete response")
         ) {
-          userMessage =
-            "The AI returned an incomplete response. This can happen with very large repositories. Please try again — results may vary.";
+          userMessage = innerError.message;
         }
         
         // Always send error event, even if streaming hasn't started
@@ -362,13 +363,14 @@ export async function registerRoutes(
       });
       
       let userMessage = error.message || "An unexpected error occurred";
+      // Use the improved error message from gemini.ts
       if (
         userMessage.includes("JSON") ||
         userMessage.includes("parse") ||
-        userMessage.includes("Unexpected token")
+        userMessage.includes("Unexpected token") ||
+        userMessage.includes("incomplete response")
       ) {
-        userMessage =
-          "The AI returned an incomplete response. This can happen with very large repositories. Please try again — results may vary.";
+        userMessage = error.message;
       }
       
       try {
